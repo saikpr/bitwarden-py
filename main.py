@@ -24,7 +24,7 @@ app.config["JWT_ACCESS_TOKEN_EXPIRES"] = EXPIRY_TIME
 app.config["JWT_REFRESH_TOKEN_EXPIRES"] = 18 * 3600
 
 # Set the secret key to sign the JWTs with
-app.config["JWT_SECRET_KEY"] = str(uuid.uuid4())
+app.config["JWT_SECRET_KEY"] = "super-secret" #TODO: Change this by getting from Firebase or ENV Variable
 
 jwt = JWTManager(app)
 

@@ -1,35 +1,70 @@
-# Copyright 2018 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+from flask import Flask, jsonify, request
+import uuid
+from flask_jwt_extended import (
+    JWTManager,
+    jwt_required,
+    create_access_token,
+    jwt_refresh_token_required,
+    create_refresh_token,
+    get_jwt_identity,
+    set_access_cookies,
+    set_refresh_cookies,
+    unset_jwt_cookies,
+)
 
-# [START gae_python37_app]
-from flask import Flask
-
-
-# If `entrypoint` is not defined in app.yaml, App Engine will look for an app
-# called `app` in `main.py`.
+EXPIRY_TIME = 3600
 app = Flask(__name__)
 
+# # Configure application to store JWTs in cookies
+app.config["JWT_TOKEN_LOCATION"] = ["headers", "json"]
 
-@app.route('/')
-def hello():
-    """Return a friendly HTTP greeting."""
-    return 'Hello World!'
+app.config["JWT_JSON_KEY"] = "access_token"
+app.config["JWT_REFRESH_JSON_KEY"] = "refresh_token"
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = EXPIRY_TIME
+app.config["JWT_REFRESH_TOKEN_EXPIRES"] = 18 * 3600
+
+# Set the secret key to sign the JWTs with
+app.config["JWT_SECRET_KEY"] = str(uuid.uuid4())
+
+jwt = JWTManager(app)
 
 
-if __name__ == '__main__':
-    # This is used when running locally only. When deploying to Google App
-    # Engine, a webserver process such as Gunicorn will serve the app. This
-    # can be configured by adding an `entrypoint` to app.yaml.
-    app.run(host='127.0.0.1', port=8080, debug=True)
-# [END gae_python37_app]
+@app.route("/api/accounts/prelogin", methods=["POST"])
+def pre_login():
+    return jsonify({"Kdf": 0, "KdfIterations": 100000,})
+
+
+@app.route("/identity/connect/token", methods=["POST"])
+def login():
+    username = request.json.get("username", None)
+    password = request.json.get("password", None)
+    if username != "test" or password != "test":
+        return jsonify({"login": False}), 401
+
+    # Create the tokens we will be sending back to the user
+    access_token = create_access_token(identity=username)
+    refresh_token = create_refresh_token(identity=username)
+
+    # Set the JWTs and the CSRF double submit protection cookies
+    # in this response
+    resp = jsonify(
+        {
+            "login": True,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_in": EXPIRY_TIME,
+            "token_type": "Bearer",
+        }
+    )
+    return resp, 200
+
+
+@app.route("/api/example", methods=["GET"])
+@jwt_required
+def protected():
+    username = get_jwt_identity()
+    return jsonify({"hello": "from {}".format(username)}), 200
+
+
+if __name__ == "__main__":
+    app.run()
